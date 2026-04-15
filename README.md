@@ -68,7 +68,7 @@ Smart_Energy_Usage_Tracker/
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/your-username/Smart_Energy_Usage_Tracker.git
+git clone https://github.com/SimonLapuz/Smart_Energy_Usage_Tracker.git
 cd Smart_Energy_Usage_Tracker
 
 2. Install dependencies:
