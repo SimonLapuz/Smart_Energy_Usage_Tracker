@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Smart Energy Tracker</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--font-sans, sans-serif); background: var(--color-background-tertiary); color: var(--color-text-primary); font-size: 15px; }
+  nav { display: flex; gap: 4px; padding: 12px 16px; background: var(--color-background-primary); border-bottom: 0.5px solid var(--color-border-tertiary); overflow-x: auto; }
+  nav button { padding: 6px 14px; border-radius: var(--border-radius-md); border: 0.5px solid var(--color-border-tertiary); background: transparent; color: var(--color-text-secondary); cursor: pointer; font-size: 13px; white-space: nowrap; }
+  nav button.active { background: var(--color-background-secondary); color: var(--color-text-primary); border-color: var(--color-border-primary); font-weight: 500; }
+  .page { display: none; padding: 16px; max-width: 900px; margin: 0 auto; }
+  .page.active { display: block; }
+  .metric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 16px; }
+  .metric { background: var(--color-background-secondary); border-radius: var(--border-radius-md); padding: 12px; }
+  .metric .label { font-size: 12px; color: var(--color-text-secondary); margin-bottom: 4px; }
+  .metric .value { font-size: 22px; font-weight: 500; }
+  .metric .sub { font-size: 11px; color: var(--color-text-tertiary); margin-top: 2px; }
+  .card { background: var(--color-background-primary); border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); padding: 16px; margin-bottom: 14px; }
+  .card h3 { font-size: 14px; font-weight: 500; color: var(--color-text-secondary); margin-bottom: 12px; }
+  label { font-size: 13px; color: var(--color-text-secondary); display: block; margin-bottom: 4px; }
+  input, select { width: 100%; margin-bottom: 10px; font-size: 14px; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .btn { padding: 8px 18px; border-radius: var(--border-radius-md); border: 0.5px solid var(--color-border-secondary); background: transparent; color: var(--color-text-primary); cursor: pointer; font-size: 14px; font-weight: 500; }
+  .btn:hover { background: var(--color-background-secondary); }
+  .btn-primary { background: #1D9E75; color: #fff; border-color: #1D9E75; }
+  .btn-primary:hover { background: #0F6E56; }
+  .btn-danger { background: transparent; color: #c0392b; border-color: #c0392b; }
+  .btn-danger:hover { background: #fdecea; }
+  .chart-wrap { position: relative; width: 100%; }
+  .log-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .log-table th { text-align: left; padding: 6px 8px; border-bottom: 0.5px solid var(--color-border-tertiary); color: var(--color-text-secondary); font-weight: 500; }
+  .log-table td { padding: 6px 8px; border-bottom: 0.5px solid var(--color-border-tertiary); }
+  .log-table tr:last-child td { border-bottom: none; }
+  .badge { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: var(--border-radius-md); }
+  .badge-elec { background: #E6F1FB; color: #185FA5; }
+  .badge-water { background: #E1F5EE; color: #0F6E56; }
+  #bill-result { font-size: 28px; font-weight: 500; color: #1D9E75; margin: 8px 0 4px; }
+  .section-title { font-size: 16px; font-weight: 500; margin-bottom: 12px; }
+  .toggle-group { display: flex; gap: 6px; margin-bottom: 12px; }
+  .toggle-group button { padding: 4px 12px; font-size: 12px; border-radius: var(--border-radius-md); border: 0.5px solid var(--color-border-tertiary); background: transparent; color: var(--color-text-secondary); cursor: pointer; }
+  .toggle-group button.active { background: var(--color-background-secondary); color: var(--color-text-primary); font-weight: 500; }
+  /* Toast */
+  #toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #333; color: #fff; padding: 8px 18px; border-radius: 8px; font-size: 13px; opacity: 0; transition: opacity .3s; pointer-events: none; z-index: 999; }
+  #toast.show { opacity: 1; }
+  /* Loading spinner */
+  .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #ccc; border-top-color: #1D9E75; border-radius: 50%; animation: spin .6s linear infinite; vertical-align: middle; margin-right: 6px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<h2 class="sr-only" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)">Smart Energy Usage Tracker</h2>
+
+<div id="toast"></div>
+
+<nav>
+  <button class="active" onclick="showPage('dashboard', this)">Dashboard</button>
+  <button onclick="showPage('log', this)">Log Usage</button>
+  <button onclick="showPage('trends', this)">Trends</button>
+  <button onclick="showPage('bill', this)">Bill Estimator</button>
+</nav>
+
+<!-- DASHBOARD -->
+<div class="page active" id="page-dashboard">
+  <div class="metric-grid" id="summary-cards">
+    <div class="metric"><div class="label">Loading…</div><div class="value">—</div></div>
+  </div>
+  <div class="card">
+    <h3>Recent 7-day electricity (kWh)</h3>
+    <div class="chart-wrap" style="height:180px"><canvas id="dash-chart"></canvas></div>
+  </div>
+  <div class="card">
+    <h3>Recent 7-day water (liters)</h3>
+    <div class="chart-wrap" style="height:180px"><canvas id="dash-water"></canvas></div>
+  </div>
+</div>
+
+<!-- LOG -->
+<div class="page" id="page-log">
+  <div class="card">
+    <p class="section-title">Add usage entry</p>
+    <div class="row">
+      <div>
+        <label>Date</label>
+        <input type="date" id="log-date">
+      </div>
+      <div>
+        <label>Type</label>
+        <select id="log-type">
+          <option value="electricity">Electricity</option>
+          <option value="water">Water</option>
+        </select>
+      </div>
+    </div>
+    <div class="row">
+      <div>
+        <label>Amount</label>
+        <input type="number" id="log-amount" placeholder="e.g. 12.5" min="0" step="0.1">
+      </div>
+      <div>
+        <label>Unit</label>
+        <input type="text" id="log-unit" placeholder="kWh / liters" readonly>
+      </div>
+    </div>
+    <label>Notes (optional)</label>
+    <input type="text" id="log-note" placeholder="e.g. AC running all day">
+    <button class="btn btn-primary" id="add-btn" onclick="addEntry()">Add entry</button>
+  </div>
+  <div class="card">
+    <h3>All entries</h3>
+    <div style="overflow-x:auto">
+      <table class="log-table">
+        <thead><tr><th>Date</th><th>Type</th><th>Amount</th><th>Notes</th><th></th></tr></thead>
+        <tbody id="log-tbody"><tr><td colspan="5" style="text-align:center;padding:16px"><span class="spinner"></span>Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- TRENDS -->
+<div class="page" id="page-trends">
+  <div class="toggle-group">
+    <button class="active" onclick="setView('weekly',this)">Weekly</button>
+    <button onclick="setView('monthly',this)">Monthly</button>
+  </div>
+  <div class="card">
+    <h3>Electricity usage (kWh)</h3>
+    <div class="chart-wrap" style="height:220px"><canvas id="trend-elec"></canvas></div>
+  </div>
+  <div class="card">
+    <h3>Water usage (liters)</h3>
+    <div class="chart-wrap" style="height:220px"><canvas id="trend-water"></canvas></div>
+  </div>
+</div>
+
+<!-- BILL -->
+<div class="page" id="page-bill">
+  <div class="card">
+    <p class="section-title">Bill estimator</p>
+    <div class="row">
+      <div>
+        <label>Electricity rate (₱/kWh)</label>
+        <input type="number" id="elec-rate" value="11.80" step="0.01">
+      </div>
+      <div>
+        <label>Water rate (₱/liter)</label>
+        <input type="number" id="water-rate" value="0.035" step="0.001">
+      </div>
+    </div>
+    <div class="row">
+      <div>
+        <label>Period</label>
+        <select id="bill-period">
+          <option value="7">Last 7 days</option>
+          <option value="30" selected>Last 30 days</option>
+          <option value="all">All time</option>
+        </select>
+      </div>
+      <div>
+        <label>Fixed charges (₱)</label>
+        <input type="number" id="fixed-charge" value="150" step="1">
+      </div>
+    </div>
+    <button class="btn btn-primary" onclick="calcBill()">Calculate</button>
+  </div>
+  <div class="card" id="bill-output" style="display:none">
+    <h3>Estimated bill</h3>
+    <div id="bill-result">₱0.00</div>
+    <div id="bill-breakdown" style="font-size:13px;color:var(--color-text-secondary);line-height:1.8"></div>
+  </div>
+</div>
+
+<script>
+// ── Config ────────────────────────────────────────────────────────────────────
+const API = "http://localhost:5000/api";
+
+// ── Chart refs ────────────────────────────────────────────────────────────────
+let dashChart, dashWaterChart, trendElecChart, trendWaterChart;
+let trendView = "weekly";
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function showToast(msg, isError = false) {
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.style.background = isError ? "#c0392b" : "#333";
+  t.classList.add("show");
+  setTimeout(() => t.classList.remove("show"), 2800);
+}
+
+async function apiFetch(path, opts = {}) {
+  const res = await fetch(API + path, {
+    headers: { "Content-Type": "application/json" },
+    ...opts,
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Server error");
+  return data;
+}
+
+function fmt(n) { return parseFloat(n).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+
+// ── Navigation ────────────────────────────────────────────────────────────────
+function showPage(id, btn) {
+  document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
+  document.querySelectorAll("nav button").forEach(b => b.classList.remove("active"));
+  document.getElementById("page-" + id).classList.add("active");
+  if (btn) btn.classList.add("active");
+  if (id === "dashboard") renderDashboard();
+  if (id === "log")       renderLog();
+  if (id === "trends")    renderTrends();
+}
+
+// ── Dashboard ─────────────────────────────────────────────────────────────────
+async function renderDashboard() {
+  try {
+    const d = await apiFetch("/dashboard");
+    const s = d.summary;
+    const cards = [
+      { label: "Avg daily electricity", value: s.avg_daily_electricity + " kWh", sub: "last 7 days" },
+      { label: "Avg daily water",       value: s.avg_daily_water + " L",         sub: "last 7 days" },
+      { label: "Est. monthly bill",     value: "₱" + fmt(s.est_monthly_bill),    sub: "based on 30-day data" },
+      { label: "Total entries",         value: s.total_entries,                  sub: "logged so far" },
+    ];
+    document.getElementById("summary-cards").innerHTML = cards
+      .map(c => `<div class="metric"><div class="label">${c.label}</div><div class="value">${c.value}</div><div class="sub">${c.sub}</div></div>`)
+      .join("");
+
+    renderBarChart("dash-chart",  d.chart.labels, d.chart.electricity, "#378ADD", "kWh",  "dashChart");
+    renderBarChart("dash-water",  d.chart.labels, d.chart.water,       "#1D9E75", "L",    "dashWaterChart");
+  } catch (e) { showToast("Dashboard error: " + e.message, true); }
+}
+
+// ── Log ───────────────────────────────────────────────────────────────────────
+document.addEventListener("DOMContentLoaded", () => {
+  document.getElementById("log-date").value = new Date().toISOString().split("T")[0];
+  document.getElementById("log-type").addEventListener("change", updateUnit);
+  updateUnit();
+  renderLog();
+  renderDashboard();
+});
+
+function updateUnit() {
+  const t = document.getElementById("log-type").value;
+  document.getElementById("log-unit").value = t === "electricity" ? "kWh" : "liters";
+}
+
+async function addEntry() {
+  const date   = document.getElementById("log-date").value;
+  const type   = document.getElementById("log-type").value;
+  const amount = parseFloat(document.getElementById("log-amount").value);
+  const note   = document.getElementById("log-note").value;
+
+  if (!date || isNaN(amount) || amount <= 0) {
+    showToast("Please enter a valid date and amount.", true);
+    return;
+  }
+
+  const btn = document.getElementById("add-btn");
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>Saving…';
+
+  try {
+    await apiFetch("/entries", {
+      method: "POST",
+      body: JSON.stringify({ date, type, amount, note }),
+    });
+    document.getElementById("log-amount").value = "";
+    document.getElementById("log-note").value   = "";
+    showToast("Entry added ✓");
+    renderLog();
+  } catch (e) {
+    showToast("Error: " + e.message, true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Add entry";
+  }
+}
+
+async function renderLog() {
+  const tbody = document.getElementById("log-tbody");
+  tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:16px"><span class="spinner"></span>Loading…</td></tr>';
+  try {
+    const entries = await apiFetch("/entries");
+    if (!entries.length) {
+      tbody.innerHTML = '<tr><td colspan="5" style="color:var(--color-text-tertiary);text-align:center;padding:16px">No entries yet.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = entries.slice(0, 50).map(e => `
+      <tr>
+        <td>${e.date}</td>
+        <td><span class="badge ${e.type === "electricity" ? "badge-elec" : "badge-water"}">${e.type}</span></td>
+        <td>${e.amount} ${e.type === "electricity" ? "kWh" : "L"}</td>
+        <td style="color:var(--color-text-tertiary);font-size:12px">${e.note || "—"}</td>
+        <td><button class="btn btn-danger" style="padding:2px 8px;font-size:12px" onclick="deleteEntry(${e.id})">×</button></td>
+      </tr>`).join("");
+  } catch (e) { showToast("Could not load entries: " + e.message, true); }
+}
+
+async function deleteEntry(id) {
+  try {
+    await apiFetch("/entries/" + id, { method: "DELETE" });
+    showToast("Entry deleted");
+    renderLog();
+    renderDashboard();
+  } catch (e) { showToast("Delete failed: " + e.message, true); }
+}
+
+// ── Trends ─────────────────────────────────────────────────────────────────────
+function setView(v, btn) {
+  trendView = v;
+  document.querySelectorAll(".toggle-group button").forEach(b => b.classList.remove("active"));
+  btn.classList.add("active");
+  renderTrends();
+}
+
+async function renderTrends() {
+  try {
+    const d = await apiFetch("/trends?view=" + trendView);
+    renderLineChart("trend-elec",  d.labels, d.electricity, "#378ADD", "trendElecChart");
+    renderLineChart("trend-water", d.labels, d.water,       "#1D9E75", "trendWaterChart");
+  } catch (e) { showToast("Trends error: " + e.message, true); }
+}
+
+// ── Bill ───────────────────────────────────────────────────────────────────────
+async function calcBill() {
+  const elec_rate  = document.getElementById("elec-rate").value   || 11.80;
+  const water_rate = document.getElementById("water-rate").value  || 0.035;
+  const fixed      = document.getElementById("fixed-charge").value || 150;
+  const period     = document.getElementById("bill-period").value;
+
+  try {
+    const d = await apiFetch(
+      `/bill?period=${period}&elec_rate=${elec_rate}&water_rate=${water_rate}&fixed=${fixed}`
+    );
+    document.getElementById("bill-result").textContent = "₱" + fmt(d.total);
+    document.getElementById("bill-breakdown").innerHTML = `
+      Electricity: ${d.electricity.kwh} kWh × ₱${elec_rate} = ₱${fmt(d.electricity.cost)}<br>
+      Water: ${d.water.liters} L × ₱${water_rate} = ₱${fmt(d.water.cost)}<br>
+      Fixed charges: ₱${fmt(d.fixed)}<br>
+      <strong>Total: ₱${fmt(d.total)}</strong>
+    `;
+    document.getElementById("bill-output").style.display = "block";
+  } catch (e) { showToast("Bill error: " + e.message, true); }
+}
+
+// ── Chart renderers ───────────────────────────────────────────────────────────
+function renderBarChart(id, labels, vals, color, unit, refName) {
+  const ctx = document.getElementById(id).getContext("2d");
+  if (window[refName]) window[refName].destroy();
+  window[refName] = new Chart(ctx, {
+    type: "bar",
+    data: { labels, datasets: [{ data: vals, backgroundColor: color + "33", borderColor: color, borderWidth: 1.5, borderRadius: 4 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        y: { beginAtZero: true, ticks: { font: { size: 11 } }, grid: { color: "rgba(128,128,128,0.1)" } },
+        x: { ticks: { font: { size: 11 } }, grid: { display: false } }
+      }
+    }
+  });
+}
+
+function renderLineChart(id, labels, vals, color, refName) {
+  const ctx = document.getElementById(id).getContext("2d");
+  if (window[refName]) window[refName].destroy();
+  window[refName] = new Chart(ctx, {
+    type: "line",
+    data: { labels, datasets: [{ data: vals, borderColor: color, backgroundColor: color + "22", fill: true, tension: 0.3, pointRadius: 3, borderWidth: 2 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        y: { beginAtZero: true, ticks: { font: { size: 11 } }, grid: { color: "rgba(128,128,128,0.1)" } },
+        x: { ticks: { font: { size: 11 }, autoSkip: true, maxRotation: 45 }, grid: { display: false } }
+      }
+    }
+  });
+}
+</script>
+</body>
+</html>
