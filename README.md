@@ -67,7 +67,11 @@ Smart_Energy_Usage_Tracker/
 ## ⚙️ Installation & Setup
 
 1. Clone the repository:
+<<<<<<< HEAD
 
+=======
+```bash
+>>>>>>> 0d3097fbb0a74da266539d3c87e0e3edb65b5581
 git clone https://github.com/SimonLapuz/Smart_Energy_Usage_Tracker.git
 cd Smart_Energy_Usage_Tracker
 
